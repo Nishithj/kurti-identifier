@@ -6,3 +6,5 @@ supabase
 pytesseract
 numpy
 opencv-python-headless
+os
+

@@ -9,9 +9,11 @@ import io
 import numpy as np
 import cv2
 import re # regex library for cleaning up extracted text
+import os
+# If running on Windows locally, use the exact path. If on the cloud, let Linux find it automatically.
+if os.name == 'nt':
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 import pytesseract
-# Add this line specifically for Windows:
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe' # <-- NEW: The OCR Library
 
 # --- 1. SETUP & CACHING ---
 st.set_page_config(page_title="Kurti Design Identifier", page_icon="👗")

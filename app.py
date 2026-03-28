@@ -10,13 +10,14 @@ import numpy as np
 import cv2
 import re # regex library for cleaning up extracted text
 import os
+import pytesseract
 # If running on Windows locally, use the exact path. If on the cloud, let Linux find it automatically.
 if os.name == 'nt':
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-import pytesseract
+
 
 # --- 1. SETUP & CACHING ---
-st.set_page_config(page_title="Kurti Design Identifier", page_icon="👗")
+st.set_page_config(page_title="Shree Nakoda Textiles AI", page_icon="👗")
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -77,11 +78,26 @@ def extract_text_from_image(image_bytes):
     return text
 
 # --- 3. USER INTERFACE ---
-st.title("👗 Kurti Design Identifier")
+import os
+
+# --- NEW: Sidebar Branding ---
+# This checks if the logo exists so the app doesn't crash if you haven't uploaded it yet!
+if os.path.exists("logo.jpeg"):
+    st.sidebar.image("logo.jpeg", use_container_width=True)
+elif os.path.exists("logo.jpg"):
+    st.sidebar.image("logo.jpg", use_container_width=True)
+
+st.sidebar.title("Shree Nakoda Textiles")
+st.sidebar.markdown("---") # Adds a clean dividing line
 
 # Create a sidebar for navigation
 st.sidebar.title("Navigation")
 app_mode = st.sidebar.radio("Go to:", ["🔍 Search Design", "➕ Add New Design"])
+
+# --- NEW: Main Page Branding ---
+st.title("👗 Shree Nakoda Textiles")
+st.subheader("AI-Powered Kurti & Fabric Catalog")
+
 
 # ==========================================
 # TAB 1: SEARCH ENGINE
@@ -150,39 +166,49 @@ elif app_mode == "➕ Add New Design":
         st.success("Unlocked! You are securely logged in.")
         
         party_name = st.text_input("Party Name *", value="Shree Nakoda Textiles")
+        
+        # --- NEW: The Manual ID Box ---
+        manual_design_id = st.text_input("Design ID (Optional)", placeholder="Leave blank for AI auto-detect")
+        
         upload_file = st.file_uploader("Upload Catalog Image *", type=['jpg', 'png', 'jpeg'], key="upload")
         
         if st.button("Save to Database"):
             if not party_name or not upload_file:
                 st.warning("Please provide both a Party Name and an Image.")
             else:
-                with st.spinner("Processing image and extracting text..."):
+                with st.spinner("Processing image and saving..."):
                     file_bytes = upload_file.getvalue()
                     
-                    # --- 1. OCR TEXT EXTRACTION ---
-                    raw_text = extract_text_from_image(file_bytes)
-                    import re
-                    match = re.search(r'([A-Z]{2,}-\d+.*)', raw_text)
-
-                    if match:
-                        extracted_text = match.group(1).strip()
+                    # --- NEW LOGIC: Manual Override vs AI ---
+                    if manual_design_id.strip():
+                        # If you typed something, use it strictly!
+                        final_design_id = manual_design_id.strip()
+                        st.success(f"Using Manual ID: {final_design_id}")
                     else:
-                        extracted_text = raw_text
+                        # If you left it blank, let the OCR AI take over
+                        raw_text = extract_text_from_image(file_bytes)
+                        import re
+                        match = re.search(r'([A-Z]{2,}-\d+.*)', raw_text)
 
-                    if len(extracted_text) > 3: 
-                        final_design_id = extracted_text
-                        st.info(f"AI Detected ID: {final_design_id}")
-                    else:
-                        safe_party = party_name.replace(" ", "").upper()
-                        random_code = str(uuid.uuid4())[:4].upper()
-                        final_design_id = f"INT-{safe_party}-{random_code}"
-                        st.warning(f"No text detected. Auto-generated ID: {final_design_id}")
+                        if match:
+                            extracted_text = match.group(1).strip()
+                        else:
+                            extracted_text = raw_text
+
+                        if len(extracted_text) > 3: 
+                            final_design_id = extracted_text
+                            st.info(f"AI Detected ID: {final_design_id}")
+                        else:
+                            safe_party = party_name.replace(" ", "").upper()
+                            random_code = str(uuid.uuid4())[:4].upper()
+                            final_design_id = f"INT-{safe_party}-{random_code}"
+                            st.warning(f"No text detected. Auto-generated ID: {final_design_id}")
                     
                     # --- 2. VECTOR & UPLOAD ---
                     vector = get_image_embedding(file_bytes)
                     file_extension = upload_file.name.split('.')[-1].lower()
                     
-                    # --- UPGRADED: Cleaner File Naming ---
+                    # Clean up file name
                     safe_file_name = re.sub(r'[^a-zA-Z0-9]', '-', final_design_id)
                     safe_file_name = re.sub(r'-+', '-', safe_file_name).strip('-')
                     safe_file_name = safe_file_name[:50]
@@ -206,4 +232,4 @@ elif app_mode == "➕ Add New Design":
                         "embedding": vector
                     }).execute()
                     
-                    st.success(f"Design successfully added!")
+                    st.success(f"Design successfully added to database!")

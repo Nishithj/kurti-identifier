@@ -7,12 +7,23 @@ from supabase import create_client, Client
 # --- 1. SETUP & STATE MEMORY ---
 st.set_page_config(page_title="Shree Nakoda Dashboard", layout="wide")
 
+# Initialize Security State early so the sidebar can use it
+if 'admin_unlocked' not in st.session_state:
+    st.session_state.admin_unlocked = False
+
 # Branding Setup
 if os.path.exists("logo.jpeg"): st.sidebar.image("logo.jpeg", use_container_width=True)
 elif os.path.exists("logo.jpg"): st.sidebar.image("logo.jpg", use_container_width=True)
 
 st.sidebar.title("🏢 Shree Nakoda Textiles")
 st.sidebar.caption("Enterprise Portal")
+
+# --- NEW: LOGOUT / LOCK BUTTON ---
+if st.session_state.admin_unlocked:
+    if st.sidebar.button("🔒 Lock Dashboard", type="primary", use_container_width=True):
+        st.session_state.admin_unlocked = False
+        st.rerun()
+
 st.sidebar.divider()
 
 col_logo, col_title = st.columns([1, 11]) 
@@ -38,6 +49,32 @@ try:
     supabase.table("orders").delete().lt("delivery_date", str(cutoff_date)).execute()
 except Exception as e:
     pass 
+
+# ==========================================
+# 🔒 SECURITY GATEWAY (LOCK SCREEN)
+# ==========================================
+if 'admin_unlocked' not in st.session_state:
+    st.session_state.admin_unlocked = False
+
+# If not unlocked, show the PIN screen and STOP the rest of the code from running
+if not st.session_state.admin_unlocked:
+    st.markdown("### 🔒 Restricted Access")
+    st.info("This dashboard contains sensitive client data. Designers: Please use the sidebar to access the Kurti Identifier.")
+    
+    col_pin, col_empty = st.columns([1, 2])
+    with col_pin:
+        pin_input = st.text_input("Enter Admin PIN to unlock:", type="password")
+        if st.button("Unlock Dashboard"):
+            # Check if what they typed matches your secrets.toml file
+            if pin_input == st.secrets["ADMIN_PIN"]:
+                st.session_state.admin_unlocked = True
+                st.rerun()
+            else:
+                st.error("❌ Incorrect PIN.")
+    
+    # st.stop() is the magic trick. It completely halts the app here. 
+    # None of your database data below this line will even load!
+    st.stop()
 
 def calculate_quantity(input_str):
     try: return int(eval(str(input_str)))
@@ -78,9 +115,10 @@ try:
         df['Hidden Delivery Date'] = pd.to_datetime(df.get('delivery_date'), errors='coerce')
         
         # --- NEW: SEARCH & FILTERS ---
-        col_f1, col_f2 = st.columns([1, 1])
+        col_f1, col_f2, col_f3 = st.columns([1.5, 1, 1])
         with col_f1: show_history = st.checkbox("🕰️ Show Past/Delivered Orders (Archive View)")
-        with col_f2: search_del_challan = st.text_input("🔍 Search by Delivery Challan No.", placeholder="e.g. 152")
+        with col_f2: search_order_id = st.text_input("🔍 Search by Order ID", placeholder="e.g. 1100")
+        with col_f3: search_del_challan = st.text_input("🔍 Search by Delivery Challan", placeholder="e.g. 152")
         
         if show_history:
             filtered_df = df.copy()
@@ -90,10 +128,14 @@ try:
             cond_recently_delivered = df['Hidden Delivery Date'] >= three_days_ago
             filtered_df = df[cond_no_challan | cond_recently_delivered].copy()
 
-        # Apply the Delivery Challan Search Filter
+        # Apply Search Filters safely
+        if search_order_id:
+            # Use == for an EXACT match instead of .contains
+            filtered_df = filtered_df[filtered_df['order_id'].fillna("").astype(str).str.strip() == str(search_order_id).strip()]
+            
         if search_del_challan:
-            # Safely check if the search string is inside the challan column
-            filtered_df = filtered_df[filtered_df['Delivery Challan'].fillna("").astype(str).str.contains(search_del_challan, case=False, na=False)]
+            # Use == for an EXACT match here too, so searching Challan '5' doesn't bring up '152'
+            filtered_df = filtered_df[filtered_df['Delivery Challan'].fillna("").astype(str).str.strip() == str(search_del_challan).strip()]
 
         filtered_df['Order ID'] = filtered_df['order_id']
         filtered_df['Party'] = filtered_df['party_name']

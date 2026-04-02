@@ -8,7 +8,7 @@ A custom-built, enterprise-grade web application designed to manage the active o
 
 * 📊 **Smart Interactive Dashboard:** Features a clean, click-to-edit table interface. Includes exact-match search filters for quick retrieval by **Order ID** or **Delivery Challan No.**
 
-📦 **Automated Smart Archiving:** When a Delivery Challan is assigned, a hidden 3-day timer starts. The order remains on the active screen for 72 hours for easy reference before automatically moving to the "Archive View".
+* 📦 **Automated Smart Archiving:** When a Delivery Challan is assigned, a hidden 3-day timer starts. The order remains on the active screen for 72 hours for easy reference before automatically moving to the "Archive View".
 
 * 🧹 **Self-Cleaning Database:** A built-in auto-maintenance routine runs invisibly every time the app opens, permanently deleting records older than 250 days to ensure lightning-fast loading speeds.
 

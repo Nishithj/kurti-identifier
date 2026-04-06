@@ -7,3 +7,4 @@ pytesseract
 numpy
 opencv-python-headless
 pandas
+plotly==5.20.0

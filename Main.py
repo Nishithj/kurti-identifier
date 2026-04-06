@@ -114,27 +114,25 @@ try:
         df['Delivery Challan'] = df.get('delivery_challan', None)
         df['Hidden Delivery Date'] = pd.to_datetime(df.get('delivery_date'), errors='coerce')
         
-        # --- NEW: SEARCH & FILTERS ---
         col_f1, col_f2, col_f3 = st.columns([1.5, 1, 1])
         with col_f1: show_history = st.checkbox("🕰️ Show Past/Delivered Orders (Archive View)")
-        with col_f2: search_order_id = st.text_input("🔍 Search by Order ID", placeholder="e.g. 1100")
+        with col_f2: search_order_id = st.text_input("🔍 Search by Order ID", placeholder="e.g. 1")
         with col_f3: search_del_challan = st.text_input("🔍 Search by Delivery Challan", placeholder="e.g. 152")
         
         if show_history:
-            filtered_df = df.copy()
+            # ONLY show delivered orders
+            cond_has_challan = df['Delivery Challan'].notna() & (df['Delivery Challan'] != "") & (df['Delivery Challan'].str.lower() != "none")
+            filtered_df = df[cond_has_challan].copy()
         else:
+            # Active orders logic
             three_days_ago = pd.to_datetime(datetime.now().date() - timedelta(days=3))
             cond_no_challan = df['Delivery Challan'].isna() | (df['Delivery Challan'] == "") | (df['Delivery Challan'].str.lower() == "none")
             cond_recently_delivered = df['Hidden Delivery Date'] >= three_days_ago
             filtered_df = df[cond_no_challan | cond_recently_delivered].copy()
 
-        # Apply Search Filters safely
         if search_order_id:
-            # Use == for an EXACT match instead of .contains
             filtered_df = filtered_df[filtered_df['order_id'].fillna("").astype(str).str.strip() == str(search_order_id).strip()]
-            
         if search_del_challan:
-            # Use == for an EXACT match here too, so searching Challan '5' doesn't bring up '152'
             filtered_df = filtered_df[filtered_df['Delivery Challan'].fillna("").astype(str).str.strip() == str(search_del_challan).strip()]
 
         filtered_df['Order ID'] = filtered_df['order_id']
@@ -150,16 +148,28 @@ try:
         display_df.insert(0, 'Delete', False)
         display_df.insert(0, 'Edit', False)
         
-        st.info("💡 Check the **✏️ Edit** box to load an order into the form below. Check **🗑️ Delete** to permanently remove it.")
+        # --- COLOR CODING LOGIC ---
+        def highlight_rows(row):
+            if pd.notna(row['Delivery Challan']) and str(row['Delivery Challan']).strip() != "":
+                return ['background-color: rgba(40, 167, 69, 0.15)'] * len(row) # Green
+            elif pd.notna(row['Remarks']) and str(row['Remarks']).strip() != "":
+                return ['background-color: rgba(255, 193, 7, 0.15)'] * len(row) # Yellow
+            return [''] * len(row)
+            
+        styled_df = display_df.style.apply(highlight_rows, axis=1)
+        
+        st.info("💡 You can now edit Challans and Remarks directly in the table! Click 'Save Table Edits' below to lock them in.")
         
         editor_key = f"table_{'history' if show_history else 'active'}_{st.session_state.table_key}"
-        disabled_cols = display_df.columns.drop(['Edit', 'Delete']).tolist()
+        
+        # Make Fab Challan, Del Challan, and Remarks editable by removing them from disabled_cols
+        disabled_cols = display_df.columns.drop(['Edit', 'Delete', 'Fab Challan', 'Delivery Challan', 'Remarks']).tolist()
         
         edited_df = st.data_editor(
-            display_df,
+            styled_df,
             column_config={
-                "Edit": st.column_config.CheckboxColumn("✏️ Edit", width="small", default=False),
-                "Delete": st.column_config.CheckboxColumn("🗑️ Delete", width="small", default=False),
+                "Edit": st.column_config.CheckboxColumn("✏️", width="small", default=False),
+                "Delete": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
                 "Order Date": st.column_config.DateColumn("Date", width="small", format="DD/MM/YYYY"),
                 "Order ID": st.column_config.TextColumn("ID", width="small"),
                 "Party": st.column_config.TextColumn("Party", width="medium"),
@@ -168,9 +178,9 @@ try:
                 "36\" Fabric": st.column_config.TextColumn("36\"", width="small"),
                 "44\" Fabric": st.column_config.TextColumn("44\"", width="small"),
                 "58\" Fabric": st.column_config.TextColumn("58\"", width="small"),
-                "Fab Challan": st.column_config.TextColumn("Fab Challan", width="small"),
-                "Delivery Challan": st.column_config.TextColumn("Del Challan", width="small"),
-                "Remarks": st.column_config.TextColumn("Remarks", width="medium")
+                "Fab Challan": st.column_config.TextColumn("Fab Challan", width="medium"),
+                "Delivery Challan": st.column_config.TextColumn("Del Challan", width="medium"),
+                "Remarks": st.column_config.TextColumn("Remarks", width="large")
             },
             disabled=disabled_cols, 
             use_container_width=True,
@@ -178,15 +188,37 @@ try:
             key=editor_key
         )
         
-        if st.button("🗑️ Process Deletions"):
-            deletions_made = False
-            for index, row in edited_df.iterrows():
-                if row['Delete'] == True:
-                    supabase.table("orders").delete().eq("order_id", row['Order ID']).execute()
-                    deletions_made = True
-            if deletions_made:
+        col_btn1, col_btn2 = st.columns([1, 4])
+        with col_btn1:
+            if st.button("🗑️ Process Deletions", use_container_width=True):
+                deletions_made = False
+                for index, row in edited_df.iterrows():
+                    if row['Delete'] == True:
+                        supabase.table("orders").delete().eq("order_id", row['Order ID']).execute()
+                        deletions_made = True
+                if deletions_made:
+                    st.session_state.table_key += 1
+                    st.success("Orders deleted successfully.")
+                    st.rerun()
+                    
+        with col_btn2:
+            if st.button("💾 Save Inline Table Edits", type="primary"):
+                for index, row in edited_df.iterrows():
+                    # Update the database with any direct text edits made in the table
+                    update_data = {
+                        "fab_challan": str(row['Fab Challan']) if pd.notna(row['Fab Challan']) else "",
+                        "delivery_challan": str(row['Delivery Challan']) if pd.notna(row['Delivery Challan']) else "",
+                        "remarks": str(row['Remarks']) if pd.notna(row['Remarks']) else ""
+                    }
+                    # Trigger the hidden date if delivery challan was just filled
+                    if update_data["delivery_challan"].strip() != "":
+                        check_existing = next((o for o in orders_data if str(o['order_id']) == str(row['Order ID'])), None)
+                        if check_existing and not check_existing.get('delivery_date'):
+                            update_data["delivery_date"] = str(datetime.now().date())
+                            
+                    supabase.table("orders").update(update_data).eq("order_id", row['Order ID']).execute()
                 st.session_state.table_key += 1
-                st.success("Orders deleted successfully.")
+                st.success("Table edits saved successfully!")
                 st.rerun()
 
         selected_order_id = None
@@ -220,10 +252,6 @@ f_rem = ""
 f_sel_design = None
 existing_del_date = None
 
-f36_choice, f36_met = "None", ""
-f44_choice, f44_met = "None", ""
-f58_choice, f58_met = "None", ""
-
 if is_editing:
     raw_order = next((o for o in orders_data if str(o['order_id']) == str(selected_order_id)), None)
     if raw_order:
@@ -235,12 +263,27 @@ if is_editing:
         f_rem = raw_order.get('remarks', "")
         f_sel_design = raw_order.get('design_id', None)
         existing_del_date = raw_order.get('delivery_date', None)
-        
-        f36_choice, f36_met = parse_fabric_string(raw_order.get('fabric_36_inch'))
-        f44_choice, f44_met = parse_fabric_string(raw_order.get('fabric_44_inch'))
-        f58_choice, f58_met = parse_fabric_string(raw_order.get('fabric_58_inch'))
 
 fk_id = f"{st.session_state.form_key}_{f_oid}"
+
+# 1. Fetch all unique fabric names to populate the dropdown dynamically
+def get_known_fabrics(data):
+    fabrics = {"Linen", "Mal", "Cambric", "Linen Butti", "Linen Shimmer", "Maslin", "Linen Jari Patta" , "Lo" , "Georgette"} 
+    if data:
+        for row in data:
+            for col in ['fabric_36_inch', 'fabric_44_inch', 'fabric_58_inch']:
+                val = str(row.get(col, ""))
+                if val and val.lower() not in ["none", "nan"]:
+                    for part in val.split("+"):
+                        if "mtr " in part.lower():
+                            try: fabrics.add(part.lower().split("mtr ")[1].strip().title())
+                            except: pass
+                        else:
+                            try: fabrics.add(part.strip().title())
+                            except: pass
+    return sorted(list(fabrics))
+
+known_fabrics = get_known_fabrics(orders_data)
 
 expander_title = f"✏️ EDITING ORDER: {selected_order_id}" if is_editing else "➕ Click Here to Create a New Order"
 with st.expander(expander_title, expanded=is_editing):
@@ -257,35 +300,51 @@ with st.expander(expander_title, expanded=is_editing):
         if total_pieces > 0: st.caption(f"Total Calculated Pieces: **{total_pieces}**")
 
     st.divider()
-    st.write("**Fabric Details (Type & Meters)**")
+    st.write("**🧵 Fabric Details**")
+    st.caption("Click the empty row at the bottom to add a new fabric. Double-click cells to edit. Type pure numbers for meters (e.g., 50).")
 
-    def get_fabric_string(label, key_suffix, default_choice, default_meters):
-        col_a, col_b = st.columns([1, 2])
-        new_fabric_name = None
-        
-        safe_choice = default_choice if default_choice in st.session_state.fabric_list else "None"
-        if default_choice and default_choice != "None" and default_choice not in st.session_state.fabric_list:
-            st.session_state.fabric_list.insert(-1, default_choice)
-            safe_choice = default_choice
+    # --- MOVED ABOVE THE TABLE ---
+    new_fabric_type = st.text_input("➕ Need a fabric not in the list? Type it here to instantly add it to the dropdowns below:", placeholder="e.g. Linen Butti", key=f"new_fab_input_{fk_id}")
 
-        with col_a:
-            choice = st.selectbox(f"{label} Fabric", st.session_state.fabric_list, index=st.session_state.fabric_list.index(safe_choice), key=f"sel_{key_suffix}_{fk_id}")
-            if choice == "➕ Add New...":
-                new_fabric_name = st.text_input(f"New {label} Name", key=f"new_{key_suffix}_{fk_id}")
-                choice = new_fabric_name 
-        with col_b: 
-            meters = st.text_input(f"{label} Meters", value=default_meters, key=f"met_{key_suffix}_{fk_id}")
-        
-        if choice and choice != "None":
-            formatted_string = f"{meters}mtr {choice}" if meters else f"{choice}"
-        else:
-            formatted_string = None
-            
-        return formatted_string, new_fabric_name
+    if new_fabric_type:
+        new_fab_clean = new_fabric_type.strip().title()
+        if new_fab_clean not in known_fabrics:
+            known_fabrics.append(new_fab_clean)
+            known_fabrics = sorted(known_fabrics)
+            st.success(f"✨ '{new_fab_clean}' added! You can now select it in the table below.")
+    # -----------------------------
 
-    fab_36, new_36 = get_fabric_string("36\"", "36", f36_choice, f36_met)
-    fab_44, new_44 = get_fabric_string("44\"", "44", f44_choice, f44_met)
-    fab_58, new_58 = get_fabric_string("58\"", "58", f58_choice, f58_met)
+    # Convert existing string data back into a table for editing
+    existing_fab_rows = []
+    if is_editing and raw_order:
+        for w_col, w_label in [('fabric_36_inch', '36"'), ('fabric_44_inch', '44"'), ('fabric_58_inch', '58"')]:
+            val = raw_order.get(w_col)
+            if val and str(val).lower() not in ["none", "nan"]:
+                for part in str(val).split("+"):
+                    part = part.strip()
+                    if not part: continue
+                    if "mtr" in part.lower():
+                        try:
+                            m = float(part.lower().split("mtr")[0].strip())
+                            t = part[part.lower().find("mtr")+3:].strip().title()
+                            existing_fab_rows.append({"Width": w_label, "Fabric": t, "Meters": m})
+                        except: pass
+                    else:
+                        existing_fab_rows.append({"Width": w_label, "Fabric": part.title(), "Meters": 0.0})
+
+    # The Structured Table Editor
+    edited_fab_df = st.data_editor(
+        pd.DataFrame(existing_fab_rows if existing_fab_rows else [{"Width": '44"', "Fabric": "Linen", "Meters": 0.0}]),
+        column_config={
+            "Width": st.column_config.SelectboxColumn("Width", options=['36"', '44"', '58"'], required=True),
+            "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=known_fabrics, required=True),
+            "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f")
+        },
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        key=f"fab_table_{fk_id}"
+    )
 
     st.divider()
     
@@ -297,55 +356,87 @@ with st.expander(expander_title, expanded=is_editing):
     st.divider()
     st.write("**Kurti Design Selection**")
     
-    search_term = st.text_input("🔍 Search Design ID", placeholder="Type ID to filter images...", key=f"search_{fk_id}")
-    
-    response = supabase.table("kurti_catalog").select("design_id, image_url").execute()
+    response = supabase.table("kurti_catalog").select("design_id, image_url").order("design_id", desc=True).execute()
     existing_designs = response.data
     selected_design_id = st.session_state.get('selected_design', f_sel_design)
 
     if existing_designs:
-        if search_term: existing_designs = [d for d in existing_designs if search_term.lower() in str(d['design_id']).lower()]
-            
-        if not existing_designs: st.warning("No designs found matching that search.")
+        search_design = st.text_input("🔍 Search Design ID", placeholder="Type to filter images...", key=f"search_design_{fk_id}")
+        
+        if search_design:
+            filtered_designs = [d for d in existing_designs if search_design.lower() in str(d['design_id']).lower()]
         else:
-            cols = st.columns(4)
-            for index, design in enumerate(existing_designs):
-                with cols[index % 4]:
-                    try:
-                        if design['image_url'] and "http" in str(design['image_url']): st.image(design['image_url'], width=100)
-                        else: st.info("No Image Link")
-                    except Exception: st.warning("Image Error")
+            filtered_designs = existing_designs
+
+        if filtered_designs:
+            with st.popover(f"🖼️ Click to Select Design Image ({len(filtered_designs)} found)", use_container_width=True):
+                st.caption("Scroll down to see all designs")
+                
+                for i in range(0, len(filtered_designs), 3):
+                    row_designs = filtered_designs[i:i+3]
+                    cols = st.columns(3)
                     
-                    if st.button(f"Select {design['design_id']}", key=f"btn_{design['design_id']}_{fk_id}"):
-                        st.session_state['selected_design'] = design['design_id']
-                        selected_design_id = design['design_id'] 
-                        
-            if selected_design_id: st.success(f"Selected Design: {selected_design_id}")
-    else:
-        st.info("No designs found in the database.")
+                    for j, design in enumerate(row_designs):
+                        with cols[j]:
+                            # --- THE FIX: We moved the button ABOVE the image! ---
+                            # We also made it wide so it acts like a title bar
+                            if st.button(f"Pick {design['design_id']}", key=f"vpick_{design['design_id']}_{fk_id}_{i}_{j}", use_container_width=True):
+                                st.session_state['selected_design'] = design['design_id']
+                                st.rerun()
+                                
+                            try:
+                                if design.get('image_url'): 
+                                    st.image(design['image_url'], use_container_width=True)
+                            except: 
+                                st.caption("No image available")
+                            
+                            st.write("") # Adds a clean little gap before the next row starts
+        else:
+            st.warning(f"No designs found matching '{search_design}'.")
+
+        if selected_design_id:
+            st.success(f"Selected Design: {selected_design_id}")
+            selected_img = next((d['image_url'] for d in existing_designs if d['design_id'] == selected_design_id), None)
+            if selected_img: st.image(selected_img, width=150)
+        else:
+            st.info("No designs found in the catalog.")
+
 
     # --- SAVE OR UPDATE LOGIC ---
     btn_text = f"💾 UPDATE Order {f_oid}" if is_editing else "💾 SAVE New Order"
     
-    if st.button(btn_text, key=f"save_{fk_id}"):
+    if st.button(btn_text, key=f"save_{fk_id}", type="primary"):
         if not order_id or not party:
             st.error("Order ID and Party Name are required!")
         else:
             try:
-                # --- FIXED: Safely check for None values to prevent the 'strip' error ---
                 save_del_date = None
                 if del_challan_input and str(del_challan_input).strip() != "":
                     save_del_date = existing_del_date if existing_del_date else str(datetime.now().date())
                 
+                # --- COMPRESS TABLE BACK TO STRINGS ---
+                fab_36_list, fab_44_list, fab_58_list = [], [], []
+                for _, row in edited_fab_df.iterrows():
+                    w = row['Width']
+                    m = row['Meters']
+                    t = row['Fabric']
+
+                    if pd.notna(w) and pd.notna(m) and pd.notna(t) and str(t).strip() != "":
+                        # Rebuild the string e.g. "50.0mtr Linen"
+                        val = f"{m}mtr {t}"
+                        if w == '36"': fab_36_list.append(val)
+                        elif w == '44"': fab_44_list.append(val)
+                        elif w == '58"': fab_58_list.append(val)
+
                 order_data = {
                     "party_name": party,
                     "order_date": str(order_date),
                     "quantity_formula": q_input,
                     "quantity_total": total_pieces,
                     "design_id": selected_design_id,
-                    "fabric_36_inch": fab_36,
-                    "fabric_44_inch": fab_44,
-                    "fabric_58_inch": fab_58,
+                    "fabric_36_inch": " + ".join(fab_36_list) if fab_36_list else None,
+                    "fabric_44_inch": " + ".join(fab_44_list) if fab_44_list else None,
+                    "fabric_58_inch": " + ".join(fab_58_list) if fab_58_list else None,
                     "fab_challan": fab_challan_input,
                     "delivery_challan": del_challan_input,
                     "delivery_date": save_del_date, 
@@ -358,17 +449,13 @@ with st.expander(expander_title, expanded=is_editing):
                 else:
                     check_existing = supabase.table("orders").select("order_id").eq("order_id", order_id).execute()
                     if len(check_existing.data) > 0:
-                        st.warning(f"⚠️ Order ID '{order_id}' already exists! Click it in the table above if you want to edit it.")
+                        st.warning(f"⚠️ Order ID '{order_id}' already exists!")
                         st.stop()
                     else:
                         order_data["order_id"] = order_id
                         supabase.table("orders").insert(order_data).execute()
                         st.success(f"Order {order_id} CREATED successfully!")
                     
-                for new_fabric in [new_36, new_44, new_58]:
-                    if new_fabric and new_fabric not in st.session_state.fabric_list:
-                        st.session_state.fabric_list.insert(-1, new_fabric)
-                
                 st.session_state['selected_design'] = None  
                 st.session_state.form_key += 1
                 st.session_state.table_key += 1              

@@ -11,6 +11,8 @@ A custom-built, enterprise-grade web application designed to manage the active o
 
 * 🚦 **Color-Coded Status:** Rows automatically highlight **Green** when dispatched (Delivery Challan assigned) and **Yellow** when Remarks are added.
 
+* 📦 **Automated Smart Archiving:** When a Delivery Challan is assigned, a hidden 3-day timer starts. The order remains on the active screen for 72 hours for easy reference before automatically moving to the "Archive View".
+
 * 🔍 **Dual Exact-Match Search:** Instantly retrieve specific orders using the dedicated `Order ID` or `Delivery Challan` search bars.
 
 * 📦 **Smart Archiving:** Dispatched orders remain visible for 3 days before automatically moving to the "Archive View" (which can be toggled via checkbox).

@@ -1,30 +1,44 @@
 # 🏢 Shree Nakoda Textiles - Enterprise Portal
 
-A custom-built, enterprise-grade web application designed to manage the active order lifecycle, track fabric usage, assign delivery challans, and securely maintain factory floor data for Shree Nakoda Textiles.
+A custom-built, enterprise-grade web application designed to manage the active order lifecycle, track complex fabric usage, assign delivery challans, and securely maintain factory floor data for Shree Nakoda Textiles.
 
-## ✨ Key Features
+## ✨ Key Features & Upgrades
 
-* 🔒 **Secure Gateway (Role-Based Access):** The main dashboard is protected by an Admin PIN. Designers can use the sidebar to access the "Kurti Identifier" without seeing sensitive client order data.
+### 📊 Smart Interactive Dashboard
+* 🔒 **Secure Gateway:** The main dashboard and analytics are protected by an Admin PIN. Includes a quick **🔒 Lock Dashboard** sidebar button for stepping away from the desk. 
 
-* 📊 **Smart Interactive Dashboard:** Features a clean, click-to-edit table interface. Includes exact-match search filters for quick retrieval by **Order ID** or **Delivery Challan No.**
+* ✍️ **Inline Table Editing:** Update `Fab Challan`, `Delivery Challan`, and `Remarks` directly from the active table without opening the order form.
 
-📦 **Automated Smart Archiving:** When a Delivery Challan is assigned, a hidden 3-day timer starts. The order remains on the active screen for 72 hours for easy reference before automatically moving to the "Archive View".
+* 🚦 **Color-Coded Status:** Rows automatically highlight **Green** when dispatched (Delivery Challan assigned) and **Yellow** when Remarks are added.
 
-* 🧹 **Self-Cleaning Database:** A built-in auto-maintenance routine runs invisibly every time the app opens, permanently deleting records older than 250 days to ensure lightning-fast loading speeds.
+* 🔍 **Dual Exact-Match Search:** Instantly retrieve specific orders using the dedicated `Order ID` or `Delivery Challan` search bars.
 
-* 🧵 **Dynamic Fabric Tracking:** Track 36", 44", and 58" fabric meters. The system includes a dynamic memory dropdown that remembers newly added custom fabric types.
+* 📦 **Smart Archiving:** Dispatched orders remain visible for 3 days before automatically moving to the "Archive View" (which can be toggled via checkbox).
 
-* 📅 **Localized Formatting:** All dates are standardized to the Indian `DD/MM/YYYY` format for ease of use.
+* 🧹 **Self-Cleaning Database:** Built-in auto-maintenance permanently deletes records older than 250 days to ensure lightning-fast load speeds.
+
+### 🧵 Dynamic Order Entry & Design Selection
+* **Smart Fabric Table:** A dynamic data grid allows staff to log multiple fabrics under the same width (e.g., mixing two 44" fabrics). Automatically formats and saves data as strings (e.g., `100.00mtr Linen + 50.00mtr Mal`).
+
+* **Auto-Learning Dropdowns:** Staff can type new fabric names directly into the form, which instantly updates the master selection dropdowns.
+
+* **Visual Popover Selection:** Replaced bulky image grids with a clean, searchable popover menu. Newest designs (`design_id` descending) automatically populate at the top of the list.
+
+### 📈 Business Intelligence (Analytics Page)
+A dedicated `2_Analytics.py` page powered by Plotly for real-time factory insights:
+* 🚨 **Smart Data Audit:** Automatically scans the database and flags specific `Order IDs` where staff forgot to enter meterage (`mtr`), ensuring charts remain 100% accurate.
+* **Stacked Fabric Consumption:** Large, interactive bar charts group fabric by base material (e.g., Total Linen) and segment them by specific variants (36", 44"). Hovering over a block reveals the exact Order ID tied to that fabric.
+* **Pending vs. Delivered:** Real-time pie chart of the current factory backlog.
+* **Volume Trends:** Area chart tracking total pieces ordered over time.
 
 ## 🛠️ Tech Stack
 
 * **Frontend & Logic:** [Streamlit](https://streamlit.io/) (Python)
 * **Data Processing:** Pandas
+* **Charting Engine:** Plotly Express
 * **Backend & Database:** [Supabase](https://supabase.com/) (PostgreSQL)
 
 ## 🚀 Local Setup & Installation
-
-Follow these steps to run the portal on your local machine:
 
 **1. Clone the repository:**
 ```bash
@@ -33,17 +47,17 @@ cd kurti-identifier
 ```
 
 **2. Install dependencies:**
-Make sure you have Python installed, then run:
+Ensure you have Python installed, then run:
 ```bash
 pip install -r requirements.txt
 ```
+*(Ensure `streamlit>=1.35.0` and `plotly>=5.20.0` are included).*
 
 **3. Configure Environment Variables:**
 Create a `.streamlit` folder in the root directory and add a `secrets.toml` file with your secure credentials:
 ```toml
 SUPABASE_URL = "your-supabase-project-url"
 SUPABASE_KEY = "your-supabase-anon-key"
-ADMIN_PASSWORD ="your-secret-password"
 ADMIN_PIN = "your-secret-pin"
 ```
 
@@ -54,7 +68,7 @@ streamlit run app.py
 
 ## 🗄️ Database Schema Requirements
 
-This application relies on a connected Supabase PostgreSQL database with the following table structures:
+This application relies on a connected Supabase PostgreSQL database. 
 
 ### Table: `orders`
 * `order_id` (Text / Primary Key)
@@ -63,21 +77,15 @@ This application relies on a connected Supabase PostgreSQL database with the fol
 * `quantity_formula` (Text)
 * `quantity_total` (Numeric)
 * `design_id` (Text / Foreign Key to kurti_catalog)
-* `fabric_36_inch` (Text)
-* `fabric_44_inch` (Text)
+* `fabric_36_inch` (Text) - *Parses concatenated strings (e.g., "50mtr Linen + 20mtr Mal")*
+* `fabric_44_inch` (Text) 
 * `fabric_58_inch` (Text)
 * `fab_challan` (Text)
 * `delivery_challan` (Text)
-* `delivery_date` (Date) - *Used for the 3-day archive timer and 250-day cleanup*
+* `delivery_date` (Date) 
 * `remarks` (Text)
 
 ### Table: `kurti_catalog`
 * `design_id` (Text / Primary Key)
 * `image_url` (Text)
-
-## 👨‍💻 Workflow Guide for Staff
-
-1. **Creating Orders:** Click the expansion panel at the bottom of the dashboard. Fill out the details. If a new fabric type is needed, select "➕ Add New..." from the dropdown.
-2. **Editing Orders:** Check the **✏️ Edit** box next to any order in the main table. The form will automatically pop open and pre-fill with the order's data. Make your changes and click Update.
-3. **Dispatching:** Enter a Delivery Challan No. to trigger the dispatch logic. The order will remain visible for 3 days before moving to the Archive view.
-4. **Locking:** Use the **🔒 Lock Dashboard** button in the sidebar when stepping away from your workstation.
+```

@@ -320,26 +320,26 @@ elif not is_editing and st.session_state['loaded_order_id'] is not None:
     st.session_state['selected_designs'] = []
     st.session_state['loaded_order_id'] = None
 # --------------------------------------------------------------
-
 fk_id = f"{st.session_state.form_key}_{f_oid}"
 
-def get_known_fabrics(data):
-    fabrics = {"Linen", "Mal", "Cambric", "Cotton", "Rayon", "Maslin", "Georgette"} 
-    if data:
-        for row in data:
-            for col in ['fabric_36_inch', 'fabric_44_inch', 'fabric_58_inch']:
-                val = str(row.get(col, ""))
-                if val and val.lower() not in ["none", "nan"]:
-                    for part in val.split("+"):
-                        if "mtr " in part.lower():
-                            try: fabrics.add(part.lower().split("mtr ")[1].strip().title())
-                            except: pass
-                        else:
-                            try: fabrics.add(part.strip().title())
-                            except: pass
-    return sorted(list(fabrics))
+# --- NEW: FETCH STRICTLY FROM FABRIC MASTER DATABASE BY WIDTH ---
+try:
+    fab_res = supabase.table("fabric_master").select("width, fabric_name").execute()
+    fab_data = fab_res.data if fab_res.data else []
+    
+    # --- FIX: We added ["None"] + to the very front of the lists! ---
+    fabrics_36 = ["None"] + sorted(list(set([f['fabric_name'] for f in fab_data if f['width'] == '36"'])))
+    fabrics_44 = ["None"] + sorted(list(set([f['fabric_name'] for f in fab_data if f['width'] == '44"'])))
+    fabrics_58 = ["None"] + sorted(list(set([f['fabric_name'] for f in fab_data if f['width'] == '58"'])))
+except:
+    fabrics_36, fabrics_44, fabrics_58 = ["None"], ["None"], ["None"]
 
-known_fabrics = get_known_fabrics(orders_data)
+# Failsafes
+if not fabrics_36: fabrics_36 = ["None"]
+if not fabrics_44: fabrics_44 = ["None"]
+if not fabrics_58: fabrics_58 = ["None"]
+# ----------------------------------------------------------------
+# ----------------------------------------------------------------
 
 expander_title = f"✏️ EDITING ORDER: {selected_order_id}" if is_editing else "➕ Click Here to Create a New Order"
 with st.expander(expander_title, expanded=is_editing):
@@ -359,21 +359,13 @@ with st.expander(expander_title, expanded=is_editing):
             total_pieces = 0
 
     st.divider()
-    st.write("**🧵 Fabric Details**")
-    st.caption("Click the empty row at the bottom to add a new fabric. Double-click cells to edit. Type pure numbers for meters (e.g., 50).")
+    st.write("**🧵 Fabric Details (Separated by Panna)**")
+    st.caption("Add rows independently for each width. Type pure numbers for meters (e.g., 50).")
 
-    new_fabric_type = st.text_input("➕ Need a fabric not in the list? Type it here to instantly add it to the dropdowns below:", placeholder="e.g. Linen Butti", key=f"new_fab_input_{fk_id}")
-
-    if new_fabric_type:
-        new_fab_clean = new_fabric_type.strip().title()
-        if new_fab_clean not in known_fabrics:
-            known_fabrics.append(new_fab_clean)
-            known_fabrics = sorted(known_fabrics)
-            st.success(f"✨ '{new_fab_clean}' added! You can now select it in the table below.")
-
-    existing_fab_rows = []
+    # Parse existing data into 3 separate lists for editing
+    rows_36, rows_44, rows_58 = [], [], []
     if is_editing and raw_order:
-        for w_col, w_label in [('fabric_36_inch', '36"'), ('fabric_44_inch', '44"'), ('fabric_58_inch', '58"')]:
+        for w_col, row_list in [('fabric_36_inch', rows_36), ('fabric_44_inch', rows_44), ('fabric_58_inch', rows_58)]:
             val = raw_order.get(w_col)
             if val and str(val).lower() not in ["none", "nan"]:
                 for part in str(val).split("+"):
@@ -383,23 +375,46 @@ with st.expander(expander_title, expanded=is_editing):
                         try:
                             m = float(part.lower().split("mtr")[0].strip())
                             t = part[part.lower().find("mtr")+3:].strip().title()
-                            existing_fab_rows.append({"Width": w_label, "Fabric": t, "Meters": m})
+                            row_list.append({"Fabric": t, "Meters": m})
                         except: pass
                     else:
-                        existing_fab_rows.append({"Width": w_label, "Fabric": part.title(), "Meters": 0.0})
+                        row_list.append({"Fabric": part.title(), "Meters": 0.0})
 
-    edited_fab_df = st.data_editor(
-        pd.DataFrame(existing_fab_rows if existing_fab_rows else [{"Width": '44"', "Fabric": "Linen", "Meters": 0.0}]),
-        column_config={
-            "Width": st.column_config.SelectboxColumn("Width", options=['36"', '44"', '58"'], required=True),
-            "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=known_fabrics, required=True),
-            "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f")
-        },
-        num_rows="dynamic",
-        use_container_width=True,
-        hide_index=True,
-        key=f"fab_table_{fk_id}"
-    )
+    # --- THREE SEPARATE FABRIC TABLES ---
+    c36, c44, c58 = st.columns(3)
+    
+    with c36:
+        st.markdown('**36" Panna**')
+        df_36 = st.data_editor(
+            pd.DataFrame(rows_36 if rows_36 else [{"Fabric": fabrics_36[0], "Meters": 0.0}]),
+            column_config={
+                "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_36, required=True, default=fabrics_36[0]),
+                "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
+            },
+            num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab36_{fk_id}"
+        )
+
+    with c44:
+        st.markdown('**44" Panna**')
+        df_44 = st.data_editor(
+            pd.DataFrame(rows_44 if rows_44 else [{"Fabric": fabrics_44[0], "Meters": 0.0}]),
+            column_config={
+                "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_44, required=True, default=fabrics_44[0]),
+                "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
+            },
+            num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab44_{fk_id}"
+        )
+
+    with c58:
+        st.markdown('**58" Panna**')
+        df_58 = st.data_editor(
+            pd.DataFrame(rows_58 if rows_58 else [{"Fabric": fabrics_58[0], "Meters": 0.0}]),
+            column_config={
+                "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_58, required=True, default=fabrics_58[0]),
+                "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
+            },
+            num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab58_{fk_id}"
+        )
 
     st.divider()
     
@@ -433,8 +448,6 @@ with st.expander(expander_title, expanded=is_editing):
                     for j, design in enumerate(row_designs):
                         with cols[j]:
                             d_id = design['design_id']
-                            
-                            # --- NEW: Visual Toggle Logic ---
                             is_selected = d_id in st.session_state['selected_designs']
                             btn_label = f"✅ Selected: {d_id}" if is_selected else f"Pick {d_id}"
                             btn_type = "primary" if is_selected else "secondary"
@@ -455,20 +468,14 @@ with st.expander(expander_title, expanded=is_editing):
         else:
             st.warning(f"No designs found matching '{search_design}'.")
 
-        # --- NEW: Display all selected images horizontally ---
         if st.session_state['selected_designs']:
             st.success(f"Selected Designs: {', '.join(st.session_state['selected_designs'])}")
-            
-            # Fetch the actual image URLs for the selected IDs
-            display_images = []
-            display_captions = []
+            display_images, display_captions = [], []
             for sel_id in st.session_state['selected_designs']:
                 img_url = next((d['image_url'] for d in existing_designs if d['design_id'] == sel_id), None)
                 if img_url:
                     display_images.append(img_url)
                     display_captions.append(sel_id)
-            
-            # Show them in a neat row
             if display_images:
                 st.image(display_images, width=150, caption=display_captions)
     else:
@@ -487,18 +494,24 @@ with st.expander(expander_title, expanded=is_editing):
                     save_del_date = existing_del_date if existing_del_date else str(datetime.now().date())
                 
                 fab_36_list, fab_44_list, fab_58_list = [], [], []
-                for _, row in edited_fab_df.iterrows():
-                    w = row['Width']
-                    m = row['Meters']
-                    t = row['Fabric']
-
-                    if pd.notna(w) and pd.notna(m) and pd.notna(t) and str(t).strip() != "":
-                        val = f"{m}mtr {t}"
-                        if w == '36"': fab_36_list.append(val)
-                        elif w == '44"': fab_44_list.append(val)
-                        elif w == '58"': fab_58_list.append(val)
                 
-                # --- NEW: Combine the list into a single string for the database ---
+               # --- NEW: Helper function with Blank/None Protection ---
+               # --- UPDATED: Helper function that ALLOWS 0.0 meters for planning ---
+                def process_fab_df(df_target, target_list):
+                    for _, row in df_target.iterrows():
+                        m, t = row['Meters'], row['Fabric']
+                        
+                        if pd.isna(m): 
+                            m = 0.0
+                            
+                        # Save the fabric as long as it is NOT "None", even if meters are 0.0!
+                        if pd.notna(t) and str(t).strip() != "" and str(t).strip().lower() != "none":
+                            target_list.append(f"{m}mtr {t}")
+
+                process_fab_df(df_36, fab_36_list)
+                process_fab_df(df_44, fab_44_list)
+                process_fab_df(df_58, fab_58_list)
+                
                 final_designs_str = ", ".join(st.session_state['selected_designs']) if st.session_state['selected_designs'] else None
                         
                 order_data = {
@@ -506,7 +519,7 @@ with st.expander(expander_title, expanded=is_editing):
                     "order_date": str(order_date),
                     "quantity_formula": q_input,
                     "quantity_total": total_pieces,
-                    "design_id": final_designs_str,  # <--- Saves "ND 1, ND 2"
+                    "design_id": final_designs_str,  
                     "fabric_36_inch": " + ".join(fab_36_list) if fab_36_list else None,
                     "fabric_44_inch": " + ".join(fab_44_list) if fab_44_list else None,
                     "fabric_58_inch": " + ".join(fab_58_list) if fab_58_list else None,
@@ -529,7 +542,6 @@ with st.expander(expander_title, expanded=is_editing):
                         supabase.table("orders").insert(order_data).execute()
                         st.success(f"Order {order_id} CREATED successfully!")
                     
-                # Reset memory upon save!
                 st.session_state['selected_designs'] = []  
                 st.session_state['loaded_order_id'] = None
                 st.session_state.form_key += 1

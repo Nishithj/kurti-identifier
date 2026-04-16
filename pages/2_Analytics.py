@@ -173,3 +173,64 @@ try:
 
 except Exception as e:
     st.error(f"Error generating analytics: {e}")
+
+
+# ==========================================
+# ANALYSIS: NUMBER OF DESIGNS BY PARTY
+# ==========================================
+st.divider()
+st.subheader("📊 Catalog Overview & Party Analysis")
+st.caption("Track your total catalog size and see which parties register the most designs.")
+
+try:
+    # 1. Fetch all designs and their associated parties from the catalog
+    res_catalog = supabase.table("kurti_catalog").select("design_id, party_name").execute()
+    
+    if res_catalog.data:
+        df_catalog = pd.DataFrame(res_catalog.data)
+        
+        # --- NEW: GRAND TOTAL METRIC CARD ---
+        # This counts the absolute number of unique designs in your entire database
+        total_designs = df_catalog['design_id'].nunique()
+        
+        # We put it in a column so the number doesn't stretch across the whole screen
+        m_col1, m_col2, m_col3 = st.columns(3)
+        with m_col1:
+            st.metric(label="Total Designs in Catalog", value=total_designs)
+            
+        st.write("") # Adds a little bit of breathing room before the chart
+        # ------------------------------------
+        
+        # 2. Clean up the party names (so "vaanisa" and "Vaanisa" group together correctly)
+        df_catalog['party_name'] = df_catalog['party_name'].astype(str).str.strip().str.title()
+        
+        # 3. Count how many unique designs belong to each party
+        party_counts = df_catalog.groupby('party_name')['design_id'].nunique().reset_index()
+        party_counts.columns = ['Party Name', 'Total Designs']
+        
+        # Sort them from highest to lowest
+        party_counts = party_counts.sort_values(by='Total Designs', ascending=False)
+        
+        col_chart, col_data = st.columns([2, 1])
+        
+        with col_chart:
+            # 4. Draw a beautiful interactive bar chart
+            st.bar_chart(data=party_counts, x='Party Name', y='Total Designs', color="#FF4B4B")
+            
+        with col_data:
+            # 5. Show a neat summary table next to it
+            st.dataframe(
+                party_counts, 
+                hide_index=True, 
+                use_container_width=True,
+                column_config={
+                    "Party Name": st.column_config.TextColumn("Party"),
+                    "Total Designs": st.column_config.NumberColumn("Designs")
+                }
+            )
+    else:
+        st.info("Not enough data in the catalog to generate this chart.")
+        
+except Exception as e:
+    st.error(f"Could not load party design analysis: {e}")
+st.divider() 

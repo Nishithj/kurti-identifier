@@ -78,83 +78,110 @@ try:
 
     col_chart1, col_chart2 = st.columns(2)
     
-    with col_chart1:
-        st.subheader("🧵 Fabric Consumption by Type & Variant")
-        
-        fabric_data_list = []
-        columns_to_check = [('fabric_36_inch', '36"'), ('fabric_44_inch', '44"'), ('fabric_58_inch', '58"')]
-        
-        for index, row in df.iterrows():
-            order_id = str(row.get('order_id', 'Unknown'))
-            for col_name, width_label in columns_to_check:
-                entry = row.get(col_name)
-                if pd.isna(entry): continue
-                entry_str = str(entry).strip()
-                if not entry_str or entry_str.lower() in ["none", "nan"]: continue
-                    
-                # Reads multiple fabrics separated by '+'
-                for part in entry_str.split("+"):
-                    part = part.strip()
-                    if not part: continue
-                    
-                    try:
-                        actual_meters = 0.0
-                        if "mtr" in part.lower():
-                            m_split = part.lower().split("mtr")
-                            actual_meters = float(m_split[0].strip())
-                            base_text = part[part.lower().find("mtr") + 3:].strip().title() 
-                        else:
-                            actual_meters = 0.0 
-                            base_text = part.title()
-                            
-                        base_material = base_text.split(" ")[0].capitalize()
+    # --- DELETED THE col_chart1, col_chart2 SPLIT ---
+    
+    # 1. FULL WIDTH FABRIC CHART
+    st.subheader("🧵 Fabric Consumption by Type & Variant")
+    
+    fabric_data_list = []
+    columns_to_check = [('fabric_36_inch', '36"'), ('fabric_44_inch', '44"'), ('fabric_58_inch', '58"')]
+    
+    for index, row in df.iterrows():
+        order_id = str(row.get('order_id', 'Unknown'))
+        for col_name, width_label in columns_to_check:
+            entry = row.get(col_name)
+            if pd.isna(entry): continue
+            entry_str = str(entry).strip()
+            if not entry_str or entry_str.lower() in ["none", "nan"]: continue
+                
+            for part in entry_str.split("+"):
+                part = part.strip()
+                if not part: continue
+                
+                try:
+                    actual_meters = 0.0
+                    if "mtr" in part.lower():
+                        m_split = part.lower().split("mtr")
+                        actual_meters = float(m_split[0].strip())
+                        base_text = part[part.lower().find("mtr") + 3:].strip().title() 
+                    else:
+                        actual_meters = 0.0 
+                        base_text = part.title()
                         
-                        chart_height = actual_meters if actual_meters > 0 else 1.0
-                        audit_status = "✅ OK" if actual_meters > 0 else "⚠️ MISSING MTRS"
-                        
-                        if base_material:
-                            fabric_data_list.append({
-                                "Order ID": order_id,
-                                "Base Material": base_material,
-                                "Specific Variant": f"{base_text} {width_label}",
-                                "Actual Meters": actual_meters,
-                                "Chart Height": chart_height,
-                                "Audit Status": audit_status
-                            })
-                    except: continue
+                    base_material = base_text.split(" ")[0].capitalize()
+                    
+                    chart_height = actual_meters if actual_meters > 0 else 1.0
+                    audit_status = "✅ OK" if actual_meters > 0 else "⚠️ MISSING MTRS"
+                    
+                    if base_material:
+                        fabric_data_list.append({
+                            "Order ID": order_id,
+                            "Base Material": base_material,
+                            "Specific Variant": f"{base_text} {width_label}",
+                            "Actual Meters": actual_meters,
+                            "Chart Height": chart_height,
+                            "Audit Status": audit_status
+                        })
+                except: continue
+    
+    if fabric_data_list:
+        fab_df = pd.DataFrame(fabric_data_list)
+        fab_df = fab_df.sort_values(by=['Base Material', 'Actual Meters'], ascending=[True, False])
         
-        if fabric_data_list:
-            fab_df = pd.DataFrame(fabric_data_list)
-            total_order = fab_df.groupby('Base Material')['Chart Height'].sum().sort_values(ascending=False).index
-            
-            fig_fab = px.bar(
-                fab_df,
-                x='Base Material',
-                y='Chart Height',
-                color='Specific Variant', 
-                hover_data={
-                    'Chart Height': False,   
-                    'Actual Meters': True,    
-                    'Order ID': True, 
-                    'Audit Status': True
-                },
-                text='Actual Meters',
-                category_orders={"Base Material": total_order}
-            )
-            
-            # This makes the chart tall and the text highly readable!
-            fig_fab.update_layout(
-                height=700, 
-                legend_title_text='Variants', 
-                yaxis_title="Total Meters (Missing entries shown as 1)",
-                xaxis_title="Fabric Base Material",
-                font=dict(size=14)
-            )
-            fig_fab.update_traces(textposition='inside')
-            
-            st.plotly_chart(fig_fab, use_container_width=True)
-        else:
-            st.info("No fabric data found.")
+        fig_fab = px.bar(
+            fab_df,
+            x='Base Material',
+            y='Chart Height',
+            color='Specific Variant', 
+            hover_data={
+                'Chart Height': False,   
+                'Actual Meters': True,    
+                'Order ID': True, 
+                'Audit Status': True
+            },
+            text='Actual Meters'
+        )
+        
+        fig_fab.update_xaxes(categoryorder='total descending') 
+        
+        fig_fab.update_layout(
+            height=550, # Slightly reduced height since it's full width now
+            bargap=0.15, 
+            legend_title_text='Variants', 
+            yaxis_title="Total Meters",
+            xaxis_title="Fabric Base Material",
+            font=dict(size=14)
+        )
+        fig_fab.update_traces(textposition='inside', textangle=0, textfont_size=12)
+        
+        # Taking up the full width of the screen!
+        st.plotly_chart(fig_fab, use_container_width=True)
+    else:
+        st.info("No fabric data found.")
+
+    st.divider()
+
+    # 2. NEXT ROW: PIE CHART & TREND CHART SIDE-BY-SIDE
+    col_pie, col_trend = st.columns([1, 1.5]) # Trend chart gets slightly more space
+    
+    with col_pie:
+        st.subheader("📦 Pending vs. Delivered")
+        status_counts = df['Status'].value_counts().reset_index()
+        status_counts.columns = ['Status', 'Count']
+        fig_status = px.pie(status_counts, values='Count', names='Status', hole=0.4,
+                            color_discrete_map={'Delivered': '#28a745', 'Pending': '#ffc107'})
+        fig_status.update_traces(textposition='inside', textinfo='value+label')
+        st.plotly_chart(fig_status, use_container_width=True)
+
+    with col_trend:
+        st.subheader("📈 Production Volume Trend")
+        trend_data = df.groupby('order_date')['quantity_total'].sum().reset_index().sort_values('order_date')
+        fig_trend = px.area(trend_data, x='order_date', y='quantity_total', color_discrete_sequence=['#4c78a8'])
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+except Exception as e:
+    st.error(f"Error generating analytics: {e}")
+    
 
     with col_chart2:
         st.subheader("📦 Pending vs. Delivered")

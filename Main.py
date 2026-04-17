@@ -380,43 +380,65 @@ with st.expander(expander_title, expanded=is_editing):
                     else:
                         row_list.append({"Fabric": part.title(), "Meters": 0.0})
 
-    # --- THREE SEPARATE FABRIC TABLES ---
+    # --- THREE SEPARATE FABRIC TABLES (WITH INBUILT SMART MATH) ---
+    import math
     c36, c44, c58 = st.columns(3)
     
     with c36:
         st.markdown('**36" Panna**')
+        # 1. The calculator input lives right above the table now
+        req_36 = st.number_input("✂️ Avg Meter/Pc", value=2.30, step=0.05, format="%.2f", key=f"req36_{fk_id}")
+        calc_36 = total_pieces * req_36
+        
+        # 2. If it's a new order, auto-fill the table with the exact math!
+        init_36 = calc_36 if (not is_editing and total_pieces > 0) else 0.0
+        
         df_36 = st.data_editor(
-            pd.DataFrame(rows_36 if rows_36 else [{"Fabric": fabrics_36[0], "Meters": 0.0}]),
+            pd.DataFrame(rows_36 if rows_36 else [{"Fabric": fabrics_36[0], "Meters": init_36}]),
             column_config={
                 "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_36, required=True, default=fabrics_36[0]),
                 "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
             },
             num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab36_{fk_id}"
         )
+        if total_pieces > 0: st.caption(f"📐 Auto-calculated: {calc_36:.2f} mtr")
 
     with c44:
         st.markdown('**44" Panna**')
+        req_44 = st.number_input("✂️ Avg Meter/Pc", value=2.55, step=0.05, format="%.2f", key=f"req44_{fk_id}")
+        calc_44 = total_pieces * req_44
+        
+        init_44 = calc_44 if (not is_editing and total_pieces > 0) else 0.0
+        
         df_44 = st.data_editor(
-            pd.DataFrame(rows_44 if rows_44 else [{"Fabric": fabrics_44[0], "Meters": 0.0}]),
+            pd.DataFrame(rows_44 if rows_44 else [{"Fabric": fabrics_44[0], "Meters": init_44}]),
             column_config={
                 "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_44, required=True, default=fabrics_44[0]),
                 "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
             },
             num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab44_{fk_id}"
         )
+        if total_pieces > 0: st.caption(f"📐 Auto-calculated: {calc_44:.2f} mtr")
 
     with c58:
         st.markdown('**58" Panna**')
+        req_58 = st.number_input("✂️ Meter per 2 Pcs", value=2.30, step=0.05, format="%.2f", key=f"req58_{fk_id}")
+        
+        # Apply the divide by 2 and round up rule specifically for 58"
+        raw_58 = (total_pieces / 2) * req_58
+        calc_58 = float(math.ceil(raw_58)) if total_pieces > 0 else 0.0
+        
+        init_58 = calc_58 if (not is_editing and total_pieces > 0) else 0.0
+        
         df_58 = st.data_editor(
-            pd.DataFrame(rows_58 if rows_58 else [{"Fabric": fabrics_58[0], "Meters": 0.0}]),
+            pd.DataFrame(rows_58 if rows_58 else [{"Fabric": fabrics_58[0], "Meters": init_58}]),
             column_config={
                 "Fabric": st.column_config.SelectboxColumn("Fabric Type", options=fabrics_58, required=True, default=fabrics_58[0]),
                 "Meters": st.column_config.NumberColumn("Meters", min_value=0.0, format="%.2f", default=0.0)
             },
             num_rows="dynamic", use_container_width=True, hide_index=True, key=f"fab58_{fk_id}"
         )
-
-    st.divider()
+        if total_pieces > 0: st.caption(f"📐 Auto-calculated: {calc_58:.2f} mtr (Exact: {raw_58:.2f})")
     
     c1, c2, c3 = st.columns(3)
     with c1: fab_challan_input = st.text_input("🏭 Fabric Challan No.", value=f_fchal, key=f"fchallan_{fk_id}")

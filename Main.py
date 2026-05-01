@@ -387,7 +387,7 @@ with st.expander(expander_title, expanded=is_editing):
     with c36:
         st.markdown('**36" Panna**')
         # 1. The calculator input lives right above the table now
-        req_36 = st.number_input("✂️ Avg Meter/Pc", value=2.30, step=0.05, format="%.2f", key=f"req36_{fk_id}")
+        req_36 = st.number_input("✂️ Avg Meter/Pc", value=2.35, step=0.05, format="%.2f", key=f"req36_{fk_id}")
         calc_36 = total_pieces * req_36
         
         # 2. If it's a new order, auto-fill the table with the exact math!
@@ -422,7 +422,7 @@ with st.expander(expander_title, expanded=is_editing):
 
     with c58:
         st.markdown('**58" Panna**')
-        req_58 = st.number_input("✂️ Meter per 2 Pcs", value=2.30, step=0.05, format="%.2f", key=f"req58_{fk_id}")
+        req_58 = st.number_input("✂️ Meter per 2 Pcs", value=2.55, step=0.05, format="%.2f", key=f"req58_{fk_id}")
         
         # Apply the divide by 2 and round up rule specifically for 58"
         raw_58 = (total_pieces / 2) * req_58

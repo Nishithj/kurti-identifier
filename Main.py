@@ -218,6 +218,39 @@ try:
         for col_name in img_column_names:
             col_config[col_name] = st.column_config.ImageColumn(col_name, width="small")
 
+        # --- NEW: CLEAN EXPORT DOWNLOAD BUTTON ---
+        st.write("  ") # Adds a little spacing
+        
+        # 1. Extract ONLY the specific columns you requested from the database
+        clean_export_df = filtered_df[[
+            'order_date', 'order_id', 'party_name', 'quantity_raw', 
+            'fabric_36_inch', 'fabric_44_inch', 'fabric_58_inch', 
+            'fab_challan', 'Delivery Challan', 'remarks'
+        ]].copy()
+        
+        # 2. Rename the columns so they look beautiful and professional in Excel
+        clean_export_df.columns = [
+            'Order Date', 'Order ID', 'Party', 'Quantity', 
+            '36" Fabric', '44" Fabric', '58" Fabric', 
+            'Fab Challan', 'Del Challan', 'Remarks'
+        ]
+        
+        # 3. Convert dates to plain text to prevent Excel from formatting them weirdly
+        clean_export_df['Order Date'] = clean_export_df['Order Date'].astype(str)
+        
+        # 4. Generate the CSV file in the background
+        csv_data = clean_export_df.to_csv(index=False).encode('utf-8')
+        
+        # 5. Draw the prominent download button
+        st.download_button(
+            label="📥 Download Clean Report (Excel/CSV)",
+            data=csv_data,
+            file_name=f"Shree_Nakoda_Orders_{datetime.now().strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            type="primary" # Makes the button red/highlighted so it's easy to find
+        )
+        # -----------------------------------------
+        
         edited_df = st.data_editor(
             styled_df,
             column_config=col_config,

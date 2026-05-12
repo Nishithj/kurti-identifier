@@ -223,7 +223,7 @@ try:
         
         # 1. Extract ONLY the specific columns you requested from the database
         clean_export_df = filtered_df[[
-            'order_date', 'order_id', 'party_name', 'quantity_raw', 
+            'order_date', 'order_id', 'party_name', 'quantity', 
             'fabric_36_inch', 'fabric_44_inch', 'fabric_58_inch', 
             'fab_challan', 'Delivery Challan', 'remarks'
         ]].copy()
